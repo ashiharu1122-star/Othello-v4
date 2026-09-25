@@ -1188,6 +1188,8 @@ button:active{
   outline:none;
   text-transform:uppercase;
 }
+.onlineSetup button:disabled{opacity:.55;pointer-events:none;}
+
 .onlineStatus{
   min-height:20px;
   margin:9px 0;
@@ -4241,16 +4243,21 @@ function openOnlineSetup(){
 
 async function createOnlineRoom(){
 
- if(!(await initOnlineFirebase()))return;
-
- const code=await findFreeRoomCode();
- onlineRoomCode=code;
- onlineRole=1;
- onlineGameEnded=false;
-
- const initial=makeInitialOnlineState();
+ const btn=document.querySelector('#onlineSetup button[onclick="createOnlineRoom()"]');
+ if(btn)btn.disabled=true;
+ setOnlineStatus("Firebaseに接続しています...");
 
  try{
+  const ok=await initOnlineFirebase();
+  if(!ok)return;
+
+  setOnlineStatus("空いているルームを探しています...");
+  const code=await findFreeRoomCode();
+  onlineRoomCode=code;
+  onlineRole=1;
+  onlineGameEnded=false;
+
+  const initial=makeInitialOnlineState();
   onlineRoomRef=firebase.database().ref("othelloRooms/"+code);
   await onlineRoomRef.set({
    host:onlineUid,
@@ -4281,8 +4288,12 @@ async function createOnlineRoom(){
   panel.insertBefore(box,document.getElementById("onlineSetupStatus"));
 
  }catch(e){
-  console.error(e);
-  setOnlineStatus("ルーム作成に失敗しました。Realtime Databaseの設定を確認してください。");
+  console.error("createOnlineRoom error:",e);
+  const code=e && e.code ? e.code : "UNKNOWN";
+  const msg=e && e.message ? e.message : String(e);
+  setOnlineStatus("ルーム作成に失敗しました: "+code+"\n"+msg);
+ }finally{
+  if(btn)btn.disabled=false;
  }
 }
 
