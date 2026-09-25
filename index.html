@@ -1812,6 +1812,10 @@ button:active{
 
   <div id="onlineSetupStatus" class="onlineStatus"></div>
 
+  <button class="action danger" onclick="cancelOnlineRoom()">
+   CANCEL ROOM
+  </button>
+
   <button class="action" onclick="show('home')">
    BACK
   </button>
@@ -4525,6 +4529,26 @@ async function copyOnlineRoomCode(){
  }catch(e){
   alert("ROOM CODE: "+onlineRoomCode);
  }
+}
+
+async function cancelOnlineRoom(){
+
+ setOnlineStatus("ルームをキャンセルしています…");
+
+ try{
+  // 作成者が待機中なら、Firebase上のルームそのものを削除する。
+  if(onlineRoomRef && onlineRole===1 && onlineUid){
+   const snap=await onlineRoomRef.get();
+   if(snap.exists() && snap.val().host===onlineUid && snap.val().status==="waiting"){
+    await onlineRoomRef.remove();
+   }
+  }
+ }catch(e){
+  console.warn("Room cancellation failed",e);
+ }
+
+ await leaveOnlineRoom();
+ show("home");
 }
 
 async function leaveOnlineRoom(){
