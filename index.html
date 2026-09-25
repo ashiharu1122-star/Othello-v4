@@ -229,6 +229,21 @@ button:active{
  color:#71879a;
 }
 
+.onlineHomeCard{
+ grid-column:1/-1;
+ min-height:130px;
+ border-color:#4b82a6 !important;
+ background:linear-gradient(145deg,#142d40,#0e1924) !important;
+}
+
+.onlineHomeCard .cardTitle{
+ color:#bfe5ff;
+}
+
+.onlineHomeCard .cardDesc{
+ color:#7fa9c2;
+}
+
 .homeCards{
  display:grid;
  grid-template-columns:1fr 1fr;
@@ -391,6 +406,12 @@ button:active{
  cursor:pointer;
  font-size:10px;
  font-weight:800;
+}
+
+.choice.onlineChoice{
+ border-color:#4f89ad;
+ color:#bfe5ff;
+ background:linear-gradient(145deg,#142c3e,#101d29);
 }
 
 .choice.selected{
@@ -1131,6 +1152,62 @@ button:active{
 
 }
 </style>
+
+<!-- Firebase Realtime Database / Anonymous Auth -->
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-database-compat.js"></script>
+
+
+<style>
+/* =========================
+ ONLINE MATCH
+========================= */
+.onlineHint{
+  padding:11px;
+  border:1px solid #2e4659;
+  border-radius:11px;
+  background:#0b1722;
+  color:#849aaa;
+  font-size:9px;
+  line-height:1.6;
+  text-align:center;
+  margin-bottom:10px;
+}
+.onlineCode{
+  width:100%;
+  min-height:48px;
+  border:1px solid #3b5268;
+  border-radius:12px;
+  background:#0b151f;
+  color:#fff;
+  text-align:center;
+  font-size:20px;
+  font-weight:900;
+  letter-spacing:5px;
+  outline:none;
+  text-transform:uppercase;
+}
+.onlineStatus{
+  min-height:20px;
+  margin:9px 0;
+  color:#7eb7d9;
+  text-align:center;
+  font-size:9px;
+}
+.onlineRoomCode{
+  padding:14px;
+  border:1px solid #52718a;
+  border-radius:13px;
+  background:#102333;
+  text-align:center;
+  margin:8px 0;
+}
+.onlineRoomCode span{display:block;color:#71899b;font-size:7px;letter-spacing:2px}
+.onlineRoomCode b{display:block;margin-top:5px;font-size:28px;letter-spacing:7px}
+
+</style>
+
 </head>
 
 <body>
@@ -1202,6 +1279,26 @@ button:active{
 
     <div class="cardDesc">
      8×8 STANDARD OTHELLO / CPU / 2 PLAYERS
+    </div>
+
+    <div class="cardArrow">
+     ›
+    </div>
+
+   </button>
+
+
+   <button class="homeCard onlineHomeCard"
+    onclick="openOnlineSetup()">
+
+    <div class="cardMark">◎</div>
+
+    <div class="cardTitle">
+     ONLINE MATCH
+    </div>
+
+    <div class="cardDesc">
+     REAL-TIME 1 VS 1 / ROOM CODE / 8×8
     </div>
 
     <div class="cardArrow">
@@ -1314,7 +1411,7 @@ button:active{
    OPPONENT
   </div>
 
-  <div class="choiceGrid two">
+  <div class="choiceGrid">
 
    <button id="classicCpu"
     class="choice selected"
@@ -1326,6 +1423,12 @@ button:active{
     class="choice"
     onclick="setClassicOpponent('pvp')">
     2 PLAYERS
+   </button>
+
+   <button id="classicOnline"
+    class="choice onlineChoice"
+    onclick="setClassicOpponent('online')">
+    ONLINE
    </button>
 
   </div>
@@ -1677,6 +1780,45 @@ button:active{
 </section>
 
 
+<!-- ONLINE SETUP -->
+<section id="onlineSetup" class="screen">
+
+ <div class="panel">
+
+  <h2 class="panelTitle">ONLINE MATCH</h2>
+
+  <div class="onlineHint">
+   同じルームコードを入力した2人で、リアルタイムに8×8オセロを対戦できます。
+  </div>
+
+  <button class="action primary" onclick="createOnlineRoom()">
+   CREATE ROOM
+  </button>
+
+  <div class="label">JOIN ROOM</div>
+
+  <input id="onlineRoomInput"
+   class="onlineCode"
+   maxlength="6"
+   placeholder="ROOM CODE"
+   autocomplete="off"
+   oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9]/g,'')">
+
+  <button class="action" onclick="joinOnlineRoom()">
+   JOIN ROOM
+  </button>
+
+  <div id="onlineSetupStatus" class="onlineStatus"></div>
+
+  <button class="action" onclick="show('home')">
+   BACK
+  </button>
+
+ </div>
+
+</section>
+
+
 <!-- GAME -->
 <section id="game" class="screen">
 
@@ -1685,6 +1827,12 @@ button:active{
   <button class="smallBtn"
    onclick="confirmHome()">
    HOME
+  </button>
+
+  <button id="onlineRoomBtn" class="smallBtn"
+   style="display:none"
+   onclick="copyOnlineRoomCode()">
+   ROOM
   </button>
 
   <div class="turn">
@@ -2011,6 +2159,29 @@ let lastConfig=null;
 
 let nexusMode=false;
 
+/* =========================================
+ ONLINE MATCH STATE
+========================================= */
+const FIREBASE_CONFIG = {
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_PROJECT.firebaseapp.com",
+  databaseURL: "https://YOUR_PROJECT-default-rtdb.firebaseio.com",
+  projectId: "YOUR_PROJECT",
+  storageBucket: "YOUR_PROJECT.firebasestorage.app",
+  messagingSenderId: "YOUR_SENDER_ID",
+  appId: "YOUR_APP_ID"
+};
+
+let onlineReady=false;
+let onlineUid=null;
+let onlineRoomCode="";
+let onlineRole=0;
+let onlineRoomRef=null;
+let onlineRoomListener=null;
+let onlineLastServerMove=null;
+let onlineGameEnded=false;
+
+
 
 /* =========================================
  RECORD DATA
@@ -2072,6 +2243,10 @@ function show(id){
 function safeHome(){
 
  stopTimer();
+
+ if(gameType==="online"){
+  leaveOnlineRoom();
+ }
 
  busy=true;
 
@@ -2170,6 +2345,9 @@ function setClassicOpponent(v){
 
  document.getElementById("classicPvp")
   .classList.toggle("selected",v==="pvp");
+
+ document.getElementById("classicOnline")
+  .classList.toggle("selected",v==="online");
 
  document.getElementById("classicDiff")
   .style.display=
@@ -2483,6 +2661,13 @@ function createPreviews(){
 function launchClassic(){
 
  nexusMode=false;
+
+ if(classicOpponent==="online"){
+
+  openOnlineSetup();
+  return;
+
+ }
 
  gameType="classic";
 
@@ -3103,6 +3288,11 @@ function render(flips=[],newPos=null){
 
 function humanMove(r,c){
 
+ if(gameType==="online"){
+  onlineMove(r,c);
+  return;
+ }
+
  if(busy)return;
 
  if(
@@ -3292,6 +3482,8 @@ function showPass(){
 ========================================= */
 
 function isCPU(){
+
+ if(gameType==="online")return false;
 
  if(nexusMode)return true;
 
@@ -3974,11 +4166,403 @@ function updateRecord(winner,black,white){
 }
 
 
+
+/* =========================================
+ ONLINE FIREBASE
+========================================= */
+
+function firebaseConfigured(){
+ return !Object.values(FIREBASE_CONFIG).some(v=>
+  typeof v==="string" && (
+   v.includes("YOUR_") ||
+   v.includes("YOUR_PROJECT")
+  )
+ );
+}
+
+async function initOnlineFirebase(){
+
+ if(onlineReady)return true;
+
+ if(!firebaseConfigured()){
+  setOnlineStatus("Firebase設定が未入力です。HTML下部のFIREBASE_CONFIGを設定してください。");
+  return false;
+ }
+
+ try{
+  if(!firebase.apps.length){
+   firebase.initializeApp(FIREBASE_CONFIG);
+  }
+
+  await firebase.auth().signInAnonymously();
+
+  onlineUid=firebase.auth().currentUser.uid;
+  onlineReady=true;
+  return true;
+
+ }catch(e){
+  console.error(e);
+  setOnlineStatus("Firebase接続に失敗しました。設定とRealtime Databaseを確認してください。");
+  return false;
+ }
+}
+
+function setOnlineStatus(text){
+ const el=document.getElementById("onlineSetupStatus");
+ if(el)el.textContent=text;
+}
+
+function randomRoomCode(){
+ const chars="ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+ let out="";
+ for(let i=0;i<6;i++)out+=chars[Math.floor(Math.random()*chars.length)];
+ return out;
+}
+
+async function findFreeRoomCode(){
+ for(let i=0;i<8;i++){
+  const code=randomRoomCode();
+  const snap=await firebase.database().ref("othelloRooms/"+code).get();
+  if(!snap.exists())return code;
+ }
+ throw new Error("ROOM_CODE_GENERATION_FAILED");
+}
+
+function openOnlineSetup(){
+ gameType="online";
+ document.getElementById("onlineRoomInput").value="";
+ setOnlineStatus("接続準備中...");
+ show("onlineSetup");
+ initOnlineFirebase().then(ok=>{
+  if(ok)setOnlineStatus("接続OK。ルームを作成するかコードを入力してください。");
+ });
+}
+
+async function createOnlineRoom(){
+
+ if(!(await initOnlineFirebase()))return;
+
+ const code=await findFreeRoomCode();
+ onlineRoomCode=code;
+ onlineRole=1;
+ onlineGameEnded=false;
+
+ const initial=makeInitialOnlineState();
+
+ try{
+  onlineRoomRef=firebase.database().ref("othelloRooms/"+code);
+  await onlineRoomRef.set({
+   host:onlineUid,
+   guest:null,
+   status:"waiting",
+   board:initial.board,
+   playable:initial.playable,
+   boardSize:8,
+   turn:1,
+   lastMove:null,
+   updatedAt:firebase.database.ServerValue.TIMESTAMP
+  });
+
+  onlineRoomRef.onDisconnect().remove();
+
+  listenOnlineRoom();
+
+  document.getElementById("onlineSetupStatus").innerHTML=
+   "このコードを対戦相手に送ってください。";
+  const panel=document.querySelector("#onlineSetup .panel");
+  const old=document.getElementById("onlineRoomCreated");
+  if(old)old.remove();
+
+  const box=document.createElement("div");
+  box.id="onlineRoomCreated";
+  box.className="onlineRoomCode";
+  box.innerHTML="<span>ROOM CODE</span><b>"+code+"</b>";
+  panel.insertBefore(box,document.getElementById("onlineSetupStatus"));
+
+ }catch(e){
+  console.error(e);
+  setOnlineStatus("ルーム作成に失敗しました。Realtime Databaseの設定を確認してください。");
+ }
+}
+
+async function joinOnlineRoom(){
+
+ if(!(await initOnlineFirebase()))return;
+
+ const code=document.getElementById("onlineRoomInput").value.trim().toUpperCase();
+
+ if(!/^[A-Z0-9]{6}$/.test(code)){
+  setOnlineStatus("6文字のルームコードを入力してください。");
+  return;
+ }
+
+ try{
+  const ref=firebase.database().ref("othelloRooms/"+code);
+  const snap=await ref.get();
+
+  if(!snap.exists()){
+   setOnlineStatus("そのルームは見つかりません。");
+   return;
+  }
+
+  const data=snap.val();
+
+  if(data.guest && data.guest!==onlineUid){
+   setOnlineStatus("そのルームは満員です。");
+   return;
+  }
+
+  if(data.status==="finished"){
+   setOnlineStatus("そのルームは終了しています。新しいルームを作成してください。");
+   return;
+  }
+
+  onlineRoomCode=code;
+  onlineRole=2;
+  onlineGameEnded=false;
+  onlineRoomRef=ref;
+
+  await ref.update({
+   guest:onlineUid,
+   status:"playing",
+   updatedAt:firebase.database.ServerValue.TIMESTAMP
+  });
+
+  ref.onDisconnect().update({
+   guest:null,
+   status:"waiting",
+   updatedAt:firebase.database.ServerValue.TIMESTAMP
+  });
+
+  listenOnlineRoom();
+
+ }catch(e){
+  console.error(e);
+  setOnlineStatus("参加に失敗しました。");
+ }
+}
+
+function makeInitialOnlineState(){
+ const b=Array.from({length:8},()=>Array(8).fill(0));
+ b[3][3]=2;
+ b[4][4]=2;
+ b[3][4]=1;
+ b[4][3]=1;
+ return{
+  board:b,
+  playable:Array.from({length:8},()=>Array(8).fill(true))
+ };
+}
+
+function listenOnlineRoom(){
+
+ if(onlineRoomListener && onlineRoomRef){
+  onlineRoomRef.off("value",onlineRoomListener);
+ }
+
+ onlineRoomListener=snap=>{
+  if(!snap.exists()){
+   setOnlineStatus("ルームが終了しました。");
+   return;
+  }
+
+  const data=snap.val();
+
+  if(data.host===onlineUid)onlineRole=1;
+  else if(data.guest===onlineUid)onlineRole=2;
+
+  if(data.status==="finished"){
+   applyOnlineState(data,true);
+   return;
+  }
+
+  if(data.status==="playing"){
+   applyOnlineState(data,false);
+  }else{
+   setOnlineStatus("対戦相手の参加を待っています...");
+  }
+ };
+
+ onlineRoomRef.on("value",onlineRoomListener);
+}
+
+function applyOnlineState(data,finished){
+
+ const firstState=
+  document.getElementById("game").classList.contains("active")===false;
+
+ boardSize=8;
+ playable=data.playable || Array.from({length:8},()=>Array(8).fill(true));
+ board=data.board || makeInitialOnlineState().board;
+ player=Number(data.turn)||1;
+ lastMove=data.lastMove||null;
+ onlineLastServerMove=data.lastMove||null;
+ busy=false;
+
+ if(firstState){
+  gameType="online";
+  maxFlips=0;
+  moveCount=0;
+  humanMoves=0;
+  cornerCount=0;
+  passCount=0;
+  busy=false;
+  nexusMode=false;
+  show("game");
+ }
+
+ render();
+
+ document.getElementById("onlineRoomBtn").style.display="block";
+ document.getElementById("onlineRoomBtn").textContent="ROOM "+onlineRoomCode;
+
+ const myTurn=player===onlineRole;
+ document.getElementById("turnSub").textContent=myTurn?"YOUR TURN":"OPPONENT TURN";
+ document.getElementById("bottomStatus").textContent=
+  myTurn?"YOUR TURN — "+getMoves(player).length+" MOVES AVAILABLE":
+  "WAITING FOR OPPONENT";
+
+ if(finished && !onlineGameEnded){
+  onlineGameEnded=true;
+  finishOnlineGame();
+ }
+}
+
+function onlineMove(r,c){
+
+ if(busy || onlineGameEnded)return;
+ if(!onlineRoomRef || !onlineUid)return;
+ if(player!==onlineRole)return;
+
+ const flips=getFlips(r,c,player);
+ if(!flips.length)return;
+
+ busy=true;
+
+ const nextBoard=cloneBoard(board);
+ nextBoard[r][c]=player;
+ flips.forEach(([rr,cc])=>nextBoard[rr][cc]=player);
+
+ const other=3-player;
+ let nextTurn=other;
+ let status="playing";
+
+ const otherMoves=getMoves(other,nextBoard);
+
+ if(!otherMoves.length){
+  const currentMoves=getMoves(player,nextBoard);
+  if(currentMoves.length){
+   nextTurn=player;
+   passCount++;
+  }else{
+   status="finished";
+  }
+ }
+
+ moveCount++;
+ humanMoves++;
+ maxFlips=Math.max(maxFlips,flips.length);
+
+ if((r===0||r===7)&&(c===0||c===7))cornerCount++;
+
+ const payload={
+  board:nextBoard,
+  turn:nextTurn,
+  lastMove:[r,c],
+  status,
+  updatedAt:firebase.database.ServerValue.TIMESTAMP
+ };
+
+ onlineRoomRef.update(payload).catch(e=>{
+  console.error(e);
+  busy=false;
+  setOnlineStatus("通信エラー。もう一度試してください。");
+ });
+}
+
+function finishOnlineGame(){
+
+ stopTimer();
+ busy=true;
+
+ const black=board.flat().filter(x=>x===1).length;
+ const white=board.flat().filter(x=>x===2).length;
+
+ let title="DRAW";
+ if(black>white)title=onlineRole===1?"YOU WIN":"YOU LOSE";
+ if(white>black)title=onlineRole===2?"YOU WIN":"YOU LOSE";
+
+ document.getElementById("resultTitle").textContent=title;
+ document.getElementById("resultSub").textContent="ONLINE MATCH COMPLETE";
+ document.getElementById("finalScore").textContent=`BLACK ${black} — ${white} WHITE`;
+ document.getElementById("statMax").textContent=maxFlips;
+ document.getElementById("statMoves").textContent=humanMoves;
+ document.getElementById("statCorners").textContent=cornerCount;
+ document.getElementById("statPasses").textContent=passCount;
+
+ setTimeout(()=>show("result"),450);
+}
+
+async function copyOnlineRoomCode(){
+
+ if(!onlineRoomCode)return;
+
+ try{
+  await navigator.clipboard.writeText(onlineRoomCode);
+  setOnlineStatus("ルームコードをコピーしました。");
+ }catch(e){
+  alert("ROOM CODE: "+onlineRoomCode);
+ }
+}
+
+async function leaveOnlineRoom(){
+
+ const ref=onlineRoomRef;
+ const role=onlineRole;
+ const code=onlineRoomCode;
+
+ if(onlineRoomListener && ref){
+  ref.off("value",onlineRoomListener);
+ }
+
+ try{
+  if(ref && onlineUid && role===2){
+   const snap=await ref.get();
+   if(snap.exists() && snap.val().guest===onlineUid){
+    await ref.update({
+     guest:null,
+     status:"waiting",
+     updatedAt:firebase.database.ServerValue.TIMESTAMP
+    });
+   }
+  }else if(ref && onlineUid && role===1){
+   const snap=await ref.get();
+   if(snap.exists() && snap.val().host===onlineUid && snap.val().status==="waiting") await ref.remove();
+  }
+ }catch(e){
+  console.warn("Online room cleanup failed",e);
+ }
+
+ onlineRoomListener=null;
+ onlineRoomRef=null;
+ onlineRoomCode="";
+ onlineRole=0;
+ onlineGameEnded=false;
+
+ const btn=document.getElementById("onlineRoomBtn");
+ if(btn)btn.style.display="none";
+}
+
 /* =========================================
  REMATCH
 ========================================= */
 
 function rematch(){
+
+ if(gameType==="online"){
+  openOnlineSetup();
+  return;
+ }
 
  if(!lastConfig)return;
 
